@@ -9,53 +9,7 @@
 
 
 
-3. **Identificar y manejar valores duplicados.**
 
-En las tablas generales no se encuentran datos duplicados a simple vista. Por ejemplo, con la tabla “user_info” se hizo la siguiente consulta:
-
-```sql
-SELECT
-  user_id,
-  age,
-  sex,
-  last_month_salary,
-  number_dependents,
-  COUNT(*) AS count
-FROM
-  `proyecto-riesgo-relativo-3.prestamos.user_info`
-GROUP BY
-  user_id,
-  age,
-  sex,
-  last_month_salary,
-  number_dependents
-HAVING
-  COUNT(*) > 1
-ORDER BY
-  count DESC;
-```
-
-Y arroja que no hay datos duplicados el líneas generales. Mencionar también que los números de “user_id” son únicos. Si realizamos la fórmula columnas por columnas, ejemplo:
-
-```sql
-SELECT
-  age,
-  COUNT(*) AS count
-FROM
-  `proyecto-riesgo-relativo-3.prestamos.user_info`
-GROUP BY
-  age
-HAVING
-  COUNT(*) > 1
-ORDER BY
-  count DESC;
-```
-
-Nos dirá la cantidad de “duplicados” con respecto a la edad, es decir, nos va arrojar una tabla mostrando cuántas personas hay con ciertas edades:
-
-![Untitled (3)](https://github.com/user-attachments/assets/fcc58ab4-8dd8-4894-9664-c179047a10f1)
-
-A pesar de que no es una información duplicada como tal, nos ayuda a realizar el conteo de cuántas personas hay por edad. Esto se puede realizar con varias columnas cuantitativas y poder obtener una información detallada. Por ahora realizaremos este proceso con las columnas: age, sex, last_month_salary, number_dependents, loan_type,  more_90_days_overdue, number_times_delayed_payment_loan_30_59_days y number_times_delayed_payment_loan_60_89_days.
 
 4. **Identificar y manejar datos fuera del alcance del análisis.**
 
