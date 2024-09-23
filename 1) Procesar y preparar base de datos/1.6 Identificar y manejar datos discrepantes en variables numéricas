@@ -1,0 +1,280 @@
+6. **Identificar y manejar datos discrepantes en variables numéricas.**
+
+En este paso trabajaremos con los outliers, que son valores atípicos. Para identificarlos analizaremos los cuartiles y la distribución de los datos. Para calcular cuartiles en BigQuery, es importante elegir variables numéricas continuas o discretas que representen una distribución de interés. Las recomendadas para este caso son:
+
+- **age:** Edad del cliente.
+- **last_month_salary:** Último salario mensual reportado.
+- **number_dependents:** Número de dependientes.
+- **using_lines_not_secured_personal_assets**: Proporción de utilización del límite de crédito en líneas no garantizadas.
+- **number_times_delayed_payment_loan_30_59_days**: Número de veces que el cliente se retrasó en el pago de un préstamo entre 30 y 59 días.
+- **number_times_delayed_payment_loan_60_89_days:** Número de veces que el cliente se retrasó en el pago de un préstamo entre 60 y 89 días.
+- **more_90_days_overdue**: Número de veces que el cliente estuvo más de 90 días vencido.
+- **debt_ratio:** Relación de deuda del prestatario.
+
+Cualquiera de estas variables es adecuada para un análisis de cuartiles, ya que representan datos cuantitativos sobre los cuales puedes medir tendencias de distribución. Los cuartiles son especialmente útiles para entender la dispersión y la centralidad de los datos, así como para identificar outliers. Trabajaremos con cada variable:
+
+### Age
+
+Identificamos los valores atípicos por medio de Big Query. Para la variable de *age* se planteó la siguiente fórmula:
+
+```sql
+SELECT
+  user_id,
+  age,
+  PERCENTILE_CONT(age, 0.25) OVER() AS Q1,
+  PERCENTILE_CONT(age, 0.50) OVER() AS Q2,  -- Cálculo de la mediana
+  PERCENTILE_CONT(age, 0.75) OVER() AS Q3,
+  (PERCENTILE_CONT(age, 0.75) OVER() - PERCENTILE_CONT(age, 0.25) OVER()) AS IQR,
+  CASE
+    WHEN age < (PERCENTILE_CONT(age, 0.25) OVER() - 1.5 * (PERCENTILE_CONT(age, 0.75) OVER() - PERCENTILE_CONT(age, 0.25) OVER()))
+      OR age > (PERCENTILE_CONT(age, 0.75) OVER() + 1.5 * (PERCENTILE_CONT(age, 0.75) OVER() - PERCENTILE_CONT(age, 0.25) OVER()))
+    THEN 'Outlier'
+    ELSE 'Not Outlier'
+  END AS outlier_flag
+FROM
+  `proyecto-riesgo-relativo-3.prestamos.combined_view`
+```
+
+![Untitled (14)](https://github.com/user-attachments/assets/9aeb9ac1-7588-4792-af35-9e759d3635e5)
+
+Visualmente podemos ver los cuartiles, la mediana y si el usuario es o no un outlier.
+
+Para tener una mejor visualización, abrimos el resultado en google sheets y filtramos cuáles son los usuarios outliers.
+
+![Untitled (15)](https://github.com/user-attachments/assets/4b3e0072-a7b2-4604-a9fd-c0b6a7880b6b)
+
+El total fue de 27 outliers que comprenden la edad de 95 en adelante. Si visualizamos esta variable por medio de una gráfica podemos notar también esa información:
+
+![Untitled (16)](https://github.com/user-attachments/assets/1aa267fa-5c4f-405f-b595-688605cae31e)
+
+Esta gráfica fue realizada en Power BI, así podemos ver qué datos son outliers. Al momento de crear el boxplot se agregaron dos valores:
+
+![Untitled (17)](https://github.com/user-attachments/assets/15d1dde5-fdeb-41d4-a0a8-59379c532b24)
+
+Y se utilizó python para poder obtener la gráfica:
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Crear un dataframe con los datos
+df = dataset
+
+# Crear el boxplot
+plt.figure(figsize=(10, 6))  # Puedes ajustar el tamaño según tus necesidades
+plt.boxplot(df['age'])
+plt.title('Boxplot de la Edad')
+plt.ylabel('Edad')
+plt.grid(True)
+plt.show()
+
+```
+
+### **last_month_salary**
+
+Con esta variable tenemos una variedad de números por el cual identificar los outliers es algo más elaborado. Partimos con calcular los cuartiles en SQL:
+
+```sql
+SELECT
+  user_id,
+  last_month_salary,
+  PERCENTILE_CONT(last_month_salary, 0.25) OVER() AS Q1,
+  PERCENTILE_CONT(last_month_salary, 0.50) OVER() AS Q2,  -- Cálculo de la mediana
+  PERCENTILE_CONT(last_month_salary, 0.75) OVER() AS Q3,
+  (PERCENTILE_CONT(last_month_salary, 0.75) OVER() - PERCENTILE_CONT(last_month_salary, 0.25) OVER()) AS IQR,
+  CASE
+    WHEN last_month_salary < (PERCENTILE_CONT(last_month_salary, 0.25) OVER() - 1.5 * (PERCENTILE_CONT(last_month_salary, 0.75) OVER() - PERCENTILE_CONT(last_month_salary, 0.25) OVER()))
+      OR last_month_salary > (PERCENTILE_CONT(last_month_salary, 0.75) OVER() + 1.5 * (PERCENTILE_CONT(last_month_salary, 0.75) OVER() - PERCENTILE_CONT(last_month_salary, 0.25) OVER()))
+    THEN 'Outlier'
+    ELSE 'Not Outlier'
+  END AS outlier_flag
+FROM
+  `proyecto-riesgo-relativo-3.prestamos.combined_view`
+```
+
+Visualmente tenemos este resultado:
+
+![Untitled (18)](https://github.com/user-attachments/assets/ca0cdf26-e93a-4759-be17-3cc17cee3bab)
+
+Calculamos también el IQR que es el rango intercuartílico, es una medida de dispersión estadística que ayuda a entender la distribución de los datos y es especialmente útil para identificar valores atípicos. IQR es la resta de Q3 - Q1.
+
+Esta fórmula nos mostraba como “not outliers” valores 0 y valores nulos, sin contar algunos números que no son considerados “normales” para el monto de *last_month_salary* como: 1, 4, 10, entre otros. Por esta razón se decidió aplicar un Winsorizing que es una técnica de transformación de datos utilizada en estadística para reducir el efecto de los valores atípicos. 
+
+Se refiere a sustituir todos los valores por debajo del percentil 5 por el valor en el percentil 5; lo mismo aplica para los valores superior del percentil 95 que se reemplazan por el valor del percentil 95. Esto se usa para "recortar" los extremos del conjunto de datos, reduciendo la influencia de los valores atípicos en el análisis estadístico.
+
+En este caso se calculará cuál es el valor del percentil 5 y los valores que sean menores se considerarán outliers. Con respecto a los valores nulos los clasificaremos como “Check Value” ya que de igual forma debemos evaluar otros valores de los clientes.
+
+![Untitled (19)](https://github.com/user-attachments/assets/66b2530c-42af-44f3-a336-cb949b730ddf)
+
+Ese es el valor de percentil 5 y percentil 95.
+
+Crearemos una formula dónde se consideren todas las situaciones planteadas anteriormente:
+
+```sql
+WITH Percentiles AS (
+  SELECT
+    user_id,
+    last_month_salary,
+    PERCENTILE_CONT(last_month_salary, 0.25) OVER() AS Q1,
+    PERCENTILE_CONT(last_month_salary, 0.50) OVER() AS Q2,
+    PERCENTILE_CONT(last_month_salary, 0.75) OVER() AS Q3,
+    PERCENTILE_CONT(last_month_salary, 0.05) OVER() AS p5,
+    PERCENTILE_CONT(last_month_salary, 0.95) OVER() AS p95
+  FROM
+    `proyecto-riesgo-relativo-3.prestamos.combined_view`
+)
+
+SELECT
+  user_id,
+  last_month_salary,
+  Q1,
+  Q2,
+  Q3,
+  p5,
+  p95,
+  CASE
+    WHEN last_month_salary IS NULL THEN 'Check Value'
+    WHEN last_month_salary < p5 THEN 'Outlier'
+    WHEN last_month_salary > p95 THEN 'Not Outlier'
+    WHEN last_month_salary < Q1 - 1.5 * (Q3 - Q1) THEN 'Outlier'
+    WHEN last_month_salary > Q3 + 1.5 * (Q3 - Q1) THEN 'very high salary'
+
+  END AS outlier_flag
+FROM
+  Percentiles
+```
+
+Así tendremos: valores menos de 1300 son outliers, los valores superiores al promedio son very high salary, los normales son not outliers y los nulos son check value.
+
+### **number_dependents**
+
+Con este boxplot podemos ver que mayormente los usuarios tienen desde 0 hasta 2 cargas dependientes, de 3 en adelante son atípicos. Se mantendrán a medida que se vaya analizando.
+
+![Untitled (20)](https://github.com/user-attachments/assets/48db69a6-f8ff-4fe8-ad7f-add0c17369e6)
+
+Hay un total de 910 usuarios que aparecen como datos nulos, a estos se les asignará el número 0 para no tener fallas al momento de seguir avanzando en el análisis. De una vez también trabajaremos con la variable last_moth_salary (ya que se encuentran en la misma tabla) y los valores nulos les asignaremos el valor de la mediana; mientras que los valores que sean menores al percentil 5 tendrán el mismo valor de este que es 1.300 y los valores igual o superiores al percentil 95 tendrán el mismo valor de este que es 14.700.
+
+Crearemos una nueva tabla con sus modificaciones con esta fórmula:
+
+```sql
+CREATE TABLE `proyecto-riesgo-relativo-3.prestamos.user_info2` AS
+SELECT
+  user_id,
+  age,
+  sex,
+    CASE
+    WHEN last_month_salary IS NULL THEN 5416 ------ mediana
+    WHEN last_month_salary BETWEEN 0 AND 1300 THEN 1300
+    WHEN last_month_salary >= 14700 THEN 14700
+    ELSE last_month_salary
+  END AS last_month_salary,
+  IF(number_dependents IS NULL, 0, number_dependents) AS number_dependents
+FROM
+ `proyecto-riesgo-relativo-3.prestamos.user_info`
+```
+
+De esta manera tendremos esta tabla lista para seguir analizando.
+
+### **using_lines_not_secured_personal_assets**
+
+En esta parte veremos a los usuario ha excedido o no su límite de crédito asignado. Como los datos se reflejan en decimales, los transformaremos a % para hacer más sencillo el análisis.
+
+```sql
+SELECT
+  user_id,
+  FORMAT("%.2f%%", using_lines_not_secured_personal_assets * 100) AS using_lines_not_secured_personal_assets_percentage
+FROM
+  `proyecto-riesgo-relativo-3.prestamos.combined_view`;
+```
+
+Con esta fórmula todos los datos se reflejarán en %:
+
+![image](https://github.com/user-attachments/assets/07d2e4f5-90be-4321-810d-4e8cf4b74e99)
+
+Ahora especificaremos que los usuarios que superen el 100% son los que exceden su límite de crédito disponible en líneas no garantizadas. Significa que pueden afectar negativamente el puntaje de crédito del usuario ya que sería un riesgo darles un préstamo por como manejan sus finanzas y deben ser monitorizados.
+
+```sql
+SELECT
+  user_id,
+  FORMAT("%.2f%%", using_lines_not_secured_personal_assets * 100) AS using_lines_not_secured_personal_assets_percentage,
+  CASE
+    WHEN using_lines_not_secured_personal_assets > 1 THEN 'Monitorize'
+    ELSE 'Normal'
+  END AS monitoring_status
+FROM
+  `proyecto-riesgo-relativo-3.prestamos.combined_view`;
+```
+
+Se visualiza así:
+
+![image (1)](https://github.com/user-attachments/assets/7fddb264-74ac-4840-af00-6e6f3ed6a85d)
+
+Esto es solo una query que utilizamos para visualizar, pero más delante se creerá la variable.
+
+### **number_times_delayed_payment_loan: 30, 59, 60, 89 y 90 more days**
+
+Se realizó un boxplot con las 3 variables juntas, de ahí podemos visualizar los outliers:
+
+![image (2)](https://github.com/user-attachments/assets/3169aa07-4d84-48bd-ad31-bc5ab2a303a2)
+
+se hizo en Power BI con Python, usando esta fórmula:
+
+```python
+# Importar las bibliotecas necesarias
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Asegúrate de que tu DataFrame se llama 'dataset'
+# Power BI automáticamente pasará los datos a la variable 'dataset'
+
+# Configurar el gráfico
+plt.figure(figsize=(12, 6))
+
+# Creando un boxplot para more_90_days_overdue
+plt.subplot(1, 3, 1)  # 1 fila, 3 columnas, primer gráfico
+plt.boxplot(dataset['more_90_days_overdue'].dropna())  # Elimina los valores nulos
+plt.title('Días de Mora > 90 Días')
+plt.ylabel('Cantidad de Días')
+
+# Creando un boxplot para number_times_delayed_payment_loan_30_59_days
+plt.subplot(1, 3, 2)  # 1 fila, 3 columnas, segundo gráfico
+plt.boxplot(dataset['number_times_delayed_payment_loan_30_59_days'].dropna())  # Elimina los valores nulos
+plt.title('Retrasos de Pago (30-59 Días)')
+plt.ylabel('Cantidad de Retrasos')
+
+# Creando un boxplot para number_times_delayed_payment_loan_60_89_days
+plt.subplot(1, 3, 3)  # 1 fila, 3 columnas, tercer gráfico
+plt.boxplot(dataset['number_times_delayed_payment_loan_60_89_days'].dropna())  # Elimina los valores nulos
+plt.title('Retrasos de Pago (60-89 Días)')
+plt.ylabel('Cantidad de Retrasos')
+
+# Mostrar el gráfico
+plt.tight_layout()
+plt.show()
+```
+
+Más adelante descartaremos el outlier que está presente en las 3 variables cerca del 100.
+
+### **debt_ratio**
+
+En esta parte veremos  la relación entre las deudas totales del usuario y su patrimonio o ingresos totales. Este indicador es muy común en las evaluaciones financieras, especialmente en el análisis de crédito, ya que proporciona una medida de la capacidad de un prestatario para gestionar y pagar sus deudas con los recursos económicos que tiene disponibles.
+
+Como los datos se reflejan en decimales, los transformaremos a % para hacer más sencillo el análisis. Los usuarios que superen el 100% indican un nivel alto de deuda en relación con los activos o ingresos, lo que puede ser un indicador de problemas financieros potenciales y un riesgo más alto para quienes otorgan créditos.
+
+```sql
+SELECT
+  user_id,
+  FORMAT("%.2f%%", debt_ratio * 100) AS debt_ratio_percentage,
+  CASE
+    WHEN debt_ratio > 1 THEN 'Monitorize'
+    ELSE 'Normal'
+  END AS monitoring_status
+FROM
+  `proyecto-riesgo-relativo-3.prestamos.combined_view`;
+```
+
+Con esta fórmula en BigQuery podemos saber qué usuarios están en los estándares normales y quienes tienen un nivel alto de deuda.
+
+![image (3)](https://github.com/user-attachments/assets/21a73937-8e97-4c71-8416-5229fa84c404)
+
+Esto es solo una query que utilizamos para visualizar, pero más delante se creerá la variable.
