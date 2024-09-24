@@ -1,4 +1,4 @@
-# Proyecto 3: Evaluación de Riesgo Relativo
+# Evaluación de Riesgo Relativo
 
 Este proyecto tiene como objetivo evaluar el riesgo relativo de los clientes que solicitan préstamos, con el fin de clasificarlos según su probabilidad de incumplimiento. Utilizando diversas herramientas y técnicas como **SQL**, **BigQuery** y **Looker Studio**, el proyecto se enfoca en procesar y analizar una gran cantidad de datos para determinar patrones de comportamiento de los clientes y su relación con variables clave como el número de dependientes, salario mensual y el historial de pagos.
 
